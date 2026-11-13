@@ -4,8 +4,8 @@ set -euo pipefail
 echo "=== Aalto Local LLM & Moat Quickstart ==="
 
 # 1. Prompt for API Key if not already set
-if [ -z "${AALTO_LLM_KEY:-}" ]; then
-  read -rsp "Paste your Aalto LLM Gateway API Key (from https://llm-gateway.k8s.aalto.fi): " AALTO_LLM_KEY
+if [ -z "${AALTO_LLM_KEY:-}" ] || [ "${AALTO_LLM_KEY}" = "your-api-key-here" ]; then
+  read -rsp "Paste your Aalto LLM Gateway API Key: " AALTO_LLM_KEY </dev/tty
   echo ""
 fi
 
