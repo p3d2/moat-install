@@ -107,4 +107,3 @@ pipx install --force git+https://github.com/AaltoRSE/moat-install.git
 "$HOME/.local/bin/moat-install" "$HOME/moat/aalto-gateway.json"
 
 echo "=== Setup Complete! Run: source ~/.bashrc ==="
-EOF
