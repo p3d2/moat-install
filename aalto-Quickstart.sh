@@ -5,8 +5,10 @@ echo "=== Aalto Local LLM & Moat Quickstart ==="
 echo "Get your API key at: https://llm-gateway.k8s.aalto.fi"
 echo ""
 
-# 1. Prompt interactively for the key to fetch live models from the Gateway
+# 1. Prompt interactively for the key and fetch live models
 while true; do
+  # Flush any multi-line paste buffer before reading
+  read -t 0.1 -n 10000 _discard </dev/tty 2>/dev/null || true
   read -rp "Paste your Aalto LLM Gateway API Key and press Enter: " INPUT_KEY </dev/tty
   AALTO_LLM_KEY=$(printf '%s' "$INPUT_KEY" | tr -d '[:space:]')
 
@@ -49,7 +51,8 @@ curl -sSL "https://github.com/AaltoRSE/moat/releases/latest/download/moat_$(unam
   | tar -xz -C "$HOME/.local/bin" moat
 chmod +x "$HOME/.local/bin/moat"
 
-# 4. Persist Moat & Apptainer paths in ~/.bashrc
+# 4. Persist environment variables in ~/.bashrc
+sed -i '/export AALTO_LLM_KEY=/d' "$HOME/.bashrc"
 if ! grep -q "APPTAINER_TMPDIR" "$HOME/.bashrc"; then
   cat << 'EOB' >> "$HOME/.bashrc"
 
@@ -60,34 +63,38 @@ export APPTAINER_CACHEDIR="$HOME/.apptainer/cache"
 export DONT_PROMPT_WSL_INSTALL=1
 EOB
 fi
+echo "export AALTO_LLM_KEY=\"$AALTO_LLM_KEY\"" >> "$HOME/.bashrc"
 export PATH="$HOME/.local/bin:$PATH"
+export AALTO_LLM_KEY="$AALTO_LLM_KEY"
 
-# 5. Configure Moat folders & default config
+# 5. Configure Moat folders & WSLg/Copilot-compatible moat-config.yaml
 mkdir -p "$HOME/.config/moat" "$HOME/moat/agents-home" "$HOME/moat/vscode-projects" "$HOME/moat/vscodium-projects"
 
 cat << 'EOC' > "$HOME/.config/moat/moat-config.yaml"
 envs:
     vscode:
-        command: code --wait $PWD
+        command: code --no-sandbox --password-store=basic --wait $PWD
         home: $HOME/moat/agents-home
         mounts:
             - $HOME/moat/vscode-projects
             - /run/user/$UID
-            - /run/dbus
+            - /tmp/.X11-unix
+            - /mnt/wslg
     vscodium:
-        command: codium --wait $PWD
+        command: codium --no-sandbox --password-store=basic --wait $PWD
         home: $HOME/moat/agents-home
         mounts:
             - $HOME/moat/vscodium-projects
             - /run/user/$UID
-            - /run/dbus
+            - /tmp/.X11-unix
+            - /mnt/wslg
 EOC
 
 if ! grep -q "DONT_PROMPT_WSL_INSTALL" "$HOME/moat/agents-home/.bashrc" 2>/dev/null; then
   echo 'export DONT_PROMPT_WSL_INSTALL=1' >> "$HOME/moat/agents-home/.bashrc"
 fi
 
-# 6. Generate ~/moat/aalto-gateway.json
+# 6. Generate ~/moat/aalto-gateway.json for moat-install (OpenCode, Pi, Codex, Cline)
 echo "-> Generating ~/moat/aalto-gateway.json..."
 jq '{
   providers: [
@@ -114,16 +121,60 @@ jq '{
     }
   ]
 }' /tmp/aalto_models.json > "$HOME/moat/aalto-gateway.json"
+
+# 7. Pre-configure Continue.dev inside Moat (~/moat/agents-home/.continue)
+echo "-> Configuring Continue.dev extension models..."
+CONTINUE_DIR="$HOME/moat/agents-home/.continue"
+mkdir -p "$CONTINUE_DIR"
+printf 'AALTO_LLM_KEY=%s\n' "$AALTO_LLM_KEY" > "$CONTINUE_DIR/.env"
+chmod 600 "$CONTINUE_DIR/.env"
+
+jq -r '
+  "name: Aalto LLM Gateway\nversion: 1.0.0\nschema: v1\nmodels:\n" +
+  ([.data[] | select(.id | test("embed"; "i") | not) |
+    "  - name: \"\(.id | split("/") | last) (Aalto)\"\n" +
+    "    provider: openai\n" +
+    "    model: \"\(.id)\"\n" +
+    "    apiBase: https://llm-gateway.k8s.aalto.fi/api/v1\n" +
+    "    apiKey: ${{ secrets.AALTO_LLM_KEY }}\n" +
+    "    roles:\n      - chat\n      - edit\n      - apply\n" +
+    "    capabilities:\n      - tool_use"
+  ] | join("\n"))
+' /tmp/aalto_models.json > "$CONTINUE_DIR/config.yaml"
+
+# 8. Pre-configure VS Code GitHub Copilot BYOK (chatLanguageModels.json) inside Moat
+echo "-> Configuring VS Code Copilot custom models (chatLanguageModels.json)..."
+VSCODE_USER_DIR="$HOME/moat/agents-home/.config/Code/User"
+mkdir -p "$VSCODE_USER_DIR"
+
+jq --arg key "$AALTO_LLM_KEY" '[
+  {
+    name: "Aalto LLM Gateway",
+    vendor: "customendpoint",
+    apiKey: $key,
+    apiType: "chat-completions",
+    models: [
+      .data[]
+      | select(.id | test("embed"; "i") | not)
+      | {
+          id: .id,
+          name: ((.id | split("/") | last) + " (Aalto)"),
+          url: "https://llm-gateway.k8s.aalto.fi/api/v1/chat/completions",
+          toolCalling: true,
+          vision: (.id | test("vl|vision"; "i")),
+          maxInputTokens: 24576,
+          maxOutputTokens: 8192
+        }
+    ]
+  }
+]' /tmp/aalto_models.json > "$VSCODE_USER_DIR/chatLanguageModels.json"
+
 rm -f /tmp/aalto_models.json
 
-# 7. Install and run moat-install
+# 9. Install and run moat-install for CLI agents (opencode, pi, codex, cline)
 echo "-> Installing and running moat-install..."
 pipx ensurepath >/dev/null
 pipx install --force git+https://github.com/AaltoRSE/moat-install.git
-
-# Export key so moat-install detects it automatically and writes it to ~/moat/agents-home/env.sh
-# (Or comment out the export line below if you want moat-install's TUI to prompt for it again)
-export AALTO_LLM_KEY="$AALTO_LLM_KEY"
 
 "$HOME/.local/bin/moat-install" \
   --provider-specification "$HOME/moat/aalto-gateway.json" \
