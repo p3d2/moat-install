@@ -64,8 +64,28 @@ export PATH="$HOME/.local/bin:$PATH"
 
 # 5. Configure Moat folders & default config
 mkdir -p "$HOME/.config/moat" "$HOME/moat/agents-home" "$HOME/moat/vscode-projects" "$HOME/moat/vscodium-projects"
-curl -fsSL -o "$HOME/.config/moat/moat-config.yaml" \
-  https://raw.githubusercontent.com/AaltoRSE/moat/main/examples/vscode/moat-config.yaml
+
+cat << 'EOC' > "$HOME/.config/moat/moat-config.yaml"
+envs:
+    vscode:
+        command: code --wait $PWD
+        home: $HOME/moat/agents-home
+        mounts:
+            - $HOME/moat/vscode-projects
+            - /run/user/$UID
+            - /run/dbus
+    vscodium:
+        command: codium --wait $PWD
+        home: $HOME/moat/agents-home
+        mounts:
+            - $HOME/moat/vscodium-projects
+            - /run/user/$UID
+            - /run/dbus
+EOC
+
+if ! grep -q "DONT_PROMPT_WSL_INSTALL" "$HOME/moat/agents-home/.bashrc" 2>/dev/null; then
+  echo 'export DONT_PROMPT_WSL_INSTALL=1' >> "$HOME/moat/agents-home/.bashrc"
+fi
 
 # 6. Generate ~/moat/aalto-gateway.json
 echo "-> Generating ~/moat/aalto-gateway.json..."
