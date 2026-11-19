@@ -66,13 +66,14 @@ echo "export AALTO_LLM_KEY=\"$AALTO_LLM_KEY\"" >> "$HOME/.bashrc"
 export PATH="$HOME/.local/bin:$PATH"
 export AALTO_LLM_KEY="$AALTO_LLM_KEY"
 
-# 5. Configure Moat folders & WSLg-compatible moat-config.yaml
-mkdir -p "$HOME/.config/moat" "$HOME/moat/agents-home" "$HOME/moat/vscode-projects" "$HOME/moat/vscodium-projects"
+# 5. Configure Moat folders, WSLg-compatible moat-config.yaml, and VS Code settings
+mkdir -p "$HOME/.config/moat" "$HOME/moat/agents-home/.config/Code/User" \
+  "$HOME/moat/vscode-projects" "$HOME/moat/vscodium-projects"
 
 cat << 'EOC' > "$HOME/.config/moat/moat-config.yaml"
 envs:
     vscode:
-        command: code "$PWD" --no-sandbox --password-store=basic --wait
+        command: code --no-sandbox --password-store=basic --wait $PWD
         home: $HOME/moat/agents-home
         mountCWD: true
         mounts:
@@ -81,7 +82,7 @@ envs:
             - /tmp/.X11-unix
             - /mnt/wslg
     vscodium:
-        command: codium "$PWD" --no-sandbox --password-store=basic --wait
+        command: codium --no-sandbox --password-store=basic --wait $PWD
         home: $HOME/moat/agents-home
         mountCWD: true
         mounts:
@@ -90,6 +91,17 @@ envs:
             - /tmp/.X11-unix
             - /mnt/wslg
 EOC
+
+python3 -c '
+import json, pathlib
+p = pathlib.Path.home() / "moat/agents-home/.config/Code/User/settings.json"
+try:
+    data = json.loads(p.read_text()) if p.exists() else {}
+except Exception:
+    data = {}
+data["window.restoreWindows"] = "none"
+p.write_text(json.dumps(data, indent=4) + "\n")
+'
 
 # Ensure sandboxed home also has DONT_PROMPT_WSL_INSTALL and AALTO_LLM_KEY
 touch "$HOME/moat/agents-home/.bashrc"
