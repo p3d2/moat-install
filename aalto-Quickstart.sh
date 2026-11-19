@@ -40,6 +40,7 @@ if ! command -v apptainer >/dev/null 2>&1; then
   sudo apt-get update -qq
   sudo apt-get install -y -qq squashfuse fuse2fs uidmap apptainer jq curl pipx
 else
+  sudo apt-get update -qq
   sudo apt-get install -y -qq jq curl pipx
 fi
 
@@ -66,14 +67,14 @@ echo "export AALTO_LLM_KEY=\"$AALTO_LLM_KEY\"" >> "$HOME/.bashrc"
 export PATH="$HOME/.local/bin:$PATH"
 export AALTO_LLM_KEY="$AALTO_LLM_KEY"
 
-# 5. Configure Moat folders, WSLg-compatible moat-config.yaml, and VS Code settings
+# 5. Configure Moat folders, WSLg-compatible moat-config.yaml, and single-window VS Code settings
 mkdir -p "$HOME/.config/moat" "$HOME/moat/agents-home/.config/Code/User" \
   "$HOME/moat/vscode-projects" "$HOME/moat/vscodium-projects"
 
-cat << 'EOF' > ~/.config/moat/moat-config.yaml
+cat << 'EOF' > "$HOME/.config/moat/moat-config.yaml"
 envs:
     vscode:
-        command: code --new-window --no-sandbox --password-store=basic --wait $PWD
+        command: code --no-sandbox --password-store=basic --wait $PWD
         home: $HOME/moat/agents-home
         mounts:
             - $HOME/moat/vscode-projects
@@ -81,7 +82,7 @@ envs:
             - /tmp/.X11-unix
             - /mnt/wslg
     vscodium:
-        command: codium --new-window --no-sandbox --password-store=basic --wait $PWD
+        command: codium --no-sandbox --password-store=basic --wait $PWD
         home: $HOME/moat/agents-home
         mounts:
             - $HOME/moat/vscodium-projects
@@ -90,14 +91,28 @@ envs:
             - /mnt/wslg
 EOF
 
+# Disable VS Code window restoration/Hot Exit and clear any cached ghost windows
+rm -rf "$HOME/moat/agents-home/.config/Code/Backups"
 python3 -c '
-import sqlite3, pathlib
-db = pathlib.Path.home() / "moat/agents-home/.config/Code/User/globalStorage/state.vscdb"
-if db.exists():
-    con = sqlite3.connect(db)
-    con.execute("DELETE FROM ItemTable WHERE key = \"windowsState\"")
-    con.commit()
-    con.close()
+import json, pathlib
+
+base = pathlib.Path.home() / "moat/agents-home/.config/Code/User"
+base.mkdir(parents=True, exist_ok=True)
+
+settings_file = base / "settings.json"
+try:
+    settings = json.loads(settings_file.read_text()) if settings_file.exists() else {}
+except Exception:
+    settings = {}
+settings["window.restoreWindows"] = "none"
+settings["files.hotExit"] = "off"
+settings_file.write_text(json.dumps(settings, indent=4) + "\n")
+
+storage_file = base / "globalStorage/storage.json"
+if storage_file.exists():
+    storage = json.loads(storage_file.read_text())
+    storage.pop("windowsState", None)
+    storage_file.write_text(json.dumps(storage, indent=4) + "\n")
 '
 
 # Ensure sandboxed home also has DONT_PROMPT_WSL_INSTALL and AALTO_LLM_KEY
