@@ -72,16 +72,18 @@ mkdir -p "$HOME/.config/moat" "$HOME/moat/agents-home" "$HOME/moat/vscode-projec
 cat << 'EOC' > "$HOME/.config/moat/moat-config.yaml"
 envs:
     vscode:
-        command: code --no-sandbox --password-store=basic --wait $PWD
+        command: code "$PWD" --no-sandbox --password-store=basic --wait
         home: $HOME/moat/agents-home
+        mountCWD: true
         mounts:
             - $HOME/moat/vscode-projects
             - /run/user/$UID
             - /tmp/.X11-unix
             - /mnt/wslg
     vscodium:
-        command: codium --no-sandbox --password-store=basic --wait $PWD
+        command: codium "$PWD" --no-sandbox --password-store=basic --wait
         home: $HOME/moat/agents-home
+        mountCWD: true
         mounts:
             - $HOME/moat/vscodium-projects
             - /run/user/$UID
