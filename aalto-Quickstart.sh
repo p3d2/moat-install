@@ -70,37 +70,34 @@ export AALTO_LLM_KEY="$AALTO_LLM_KEY"
 mkdir -p "$HOME/.config/moat" "$HOME/moat/agents-home/.config/Code/User" \
   "$HOME/moat/vscode-projects" "$HOME/moat/vscodium-projects"
 
-cat << 'EOC' > "$HOME/.config/moat/moat-config.yaml"
+cat << 'EOF' > ~/.config/moat/moat-config.yaml
 envs:
     vscode:
-        command: code --no-sandbox --password-store=basic --wait $PWD
+        command: code --new-window --no-sandbox --password-store=basic --wait $PWD
         home: $HOME/moat/agents-home
-        mountCWD: true
         mounts:
             - $HOME/moat/vscode-projects
             - /run/user/$UID
             - /tmp/.X11-unix
             - /mnt/wslg
     vscodium:
-        command: codium --no-sandbox --password-store=basic --wait $PWD
+        command: codium --new-window --no-sandbox --password-store=basic --wait $PWD
         home: $HOME/moat/agents-home
-        mountCWD: true
         mounts:
             - $HOME/moat/vscodium-projects
             - /run/user/$UID
             - /tmp/.X11-unix
             - /mnt/wslg
-EOC
+EOF
 
 python3 -c '
-import json, pathlib
-p = pathlib.Path.home() / "moat/agents-home/.config/Code/User/settings.json"
-try:
-    data = json.loads(p.read_text()) if p.exists() else {}
-except Exception:
-    data = {}
-data["window.restoreWindows"] = "none"
-p.write_text(json.dumps(data, indent=4) + "\n")
+import sqlite3, pathlib
+db = pathlib.Path.home() / "moat/agents-home/.config/Code/User/globalStorage/state.vscdb"
+if db.exists():
+    con = sqlite3.connect(db)
+    con.execute("DELETE FROM ItemTable WHERE key = \"windowsState\"")
+    con.commit()
+    con.close()
 '
 
 # Ensure sandboxed home also has DONT_PROMPT_WSL_INSTALL and AALTO_LLM_KEY
